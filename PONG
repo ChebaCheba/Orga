@@ -1,0 +1,417 @@
+//Añadir las librerías para controlar la matriz
+#include "LedControl.h"
+#include "Timer.h"
+
+ 
+#define JPIN A5
+#define JPIN2 A6
+#define PADSIZE 3 
+#define BALL_DELAY 200
+#define GAME_DELAY 10
+#define BOUNCE_VERTICAL 1
+#define BOUNCE_HORIZONTAL -1
+#define NEW_GAME_ANIMATION_SPEED 50
+#define HIT_NONE 0
+#define HIT_CENTER 1
+#define HIT_LEFT 2
+#define HIT_RIGHT 3
+ 
+//#define DEBUG 1
+
+
+ 
+byte dos[] = {
+B00111100,
+B01000010,
+B00000100,
+B00001000,
+B00010000,
+B00100000,
+B01111110,
+B00000000
+};
+ 
+byte uno[] = {
+B00001000,
+B00011000,
+B00101000,
+B00001000,
+B00001000,
+B00001000,
+B00111110,
+B00000000
+};
+byte feliz[] = {
+  B00111100,
+  B01000010,
+  B10100101,
+  B10000001,
+  B10100101,
+  B10011001,
+  B01000010,
+  B00111100
+};
+ 
+Timer timer;
+ 
+LedControl lc = LedControl(12,11,10,1);
+
+byte direction;
+int xball;
+int yball;
+int yball_prev;
+byte xpad = 7- PADSIZE;
+byte xpad2 = 8- PADSIZE;
+int ball_timer;
+int contador = 0;
+int contador2 = 0;
+
+ 
+void setSprite(byte *sprite){
+    for(int r = 0; r < 8; r++){
+        lc.setRow(0, r, sprite[r]);
+    }
+}
+ 
+void newGame() {
+    
+    setSprite(feliz);
+    delay(1500);
+    lc.clearDisplay(0);
+    // initial position
+    xball = random(1, 7);
+    yball = 2;
+    contador=0;
+    contador2=0;
+    digitalWrite(47, LOW);
+    digitalWrite(48, LOW);
+    digitalWrite(49, LOW);
+    digitalWrite(53, LOW);
+    digitalWrite(52, LOW);
+    digitalWrite(51, LOW);
+    int ran;
+    
+    direction = random(3,6);
+    
+    for(int r = 0; r < 8; r++){
+        for(int c = 0; c < 8; c++){
+            lc.setLed(0, r, c, HIGH);
+            delay(NEW_GAME_ANIMATION_SPEED);
+        }
+    }
+    
+    delay(1500);
+    lc.clearDisplay(0);
+}
+ 
+void setPad() {
+    if(analogRead(JPIN)>700){
+      xpad = xpad+1;
+      if(xpad > 4){
+        xpad=4;
+      }
+    }
+    else if (analogRead(JPIN)< 360){
+      xpad = xpad-1;
+      if(xpad < 0){
+        xpad=0;
+      }
+    }
+    delay(100);
+}
+void setPad2(){
+  if(analogRead(JPIN2)>700){
+      xpad2 += 1;
+      if(xpad2 > 5){
+        xpad2=5;
+      }
+    }
+    else if (analogRead(JPIN2)< 360){
+      xpad2 -= 1;
+      if(xpad2 < 0){
+        xpad2=0;
+      }
+    }
+    delay(100);
+ }
+ 
+void debug(const char* desc){
+#ifdef DEBUG
+    Serial.print(desc);
+    Serial.print(" XY: ");
+    Serial.print(xball);
+    Serial.print(", ");
+    Serial.print(yball);
+    Serial.print(" XPAD: ");
+    Serial.print(xpad);
+    Serial.print(" DIR: ");
+    Serial.println(direction);
+#endif
+}
+ 
+int checkBounce() {
+    if(!xball || yball==1 || xball == 7 || yball == 6){
+        int bounce = (yball == 1 || yball == 6) ? BOUNCE_HORIZONTAL : BOUNCE_VERTICAL;
+#ifdef DEBUG
+        debug(bounce == BOUNCE_HORIZONTAL ? "HORIZONTAL" : "VERTICAL");
+#endif
+        return bounce;
+    }
+    return 0;
+}
+ 
+int getHit() {
+    if(yball != 6 || xball < xpad || xball > xpad + PADSIZE){
+        return HIT_NONE;
+    }
+    if(xball == xpad + PADSIZE / 2){
+        return HIT_CENTER;
+    }
+    return xball < xpad + PADSIZE / 2 ? HIT_LEFT : HIT_RIGHT;
+}
+int getHit2() {
+   if(yball != 1 || xball < xpad2 || xball > xpad2 + PADSIZE){
+        return HIT_NONE;
+    }
+    if(xball == xpad2 + PADSIZE / 2){
+        return HIT_CENTER;
+    }
+    return xball < xpad2 + PADSIZE / 2 ? HIT_RIGHT : HIT_LEFT;
+  }
+ 
+bool checkLoose() {
+    return ((yball == 6 && getHit() == HIT_NONE));
+}
+bool checkLoose2(){
+    return (yball == 1 && getHit2() == HIT_NONE);
+  }
+ 
+void moveBall() {
+    debug("MOVE");
+    int bounce = checkBounce();
+    if(bounce) {
+        switch(direction){
+            case 0:
+                direction = 4;
+            break;
+            case 1:
+                direction = (bounce == BOUNCE_VERTICAL) ? 7 : 3;
+            break;
+            case 2:
+                direction = 6;
+            break;
+            case 6:
+                direction = 3;
+            break;
+            case 7:
+                direction = (bounce == BOUNCE_VERTICAL) ? 1 : 5;
+            break;
+            case 5:
+                direction = (bounce == BOUNCE_VERTICAL) ? 3 : 7;
+            break;
+            case 3:
+                direction = (bounce == BOUNCE_VERTICAL) ? 5 : 1;
+            break;
+            case 4:
+                direction = 0;
+            break;
+        }
+        debug("->");
+    }
+ 
+    switch(getHit()){
+        case HIT_LEFT:
+            if(direction == 0){
+                direction =  7;
+            } else if (direction == 1){
+                direction = 0;
+            }
+        break;
+        case HIT_RIGHT:
+            if(direction == 0){
+                direction = 1;
+            } else if(direction == 7){
+                direction = 0;
+            }
+        break;
+    }
+    switch(getHit2()){
+        case HIT_LEFT:
+            if(direction == 4){
+                direction =  5;
+            } else if (direction == 3){
+                direction = 4;
+            }
+        break;
+        case HIT_RIGHT:
+            if(direction == 4){
+                direction = 5;
+            } else if(direction == 3){
+                direction = 4;
+            }
+        break;
+    }
+   
+    if((direction == 0 && xball == 0) || (direction == 4 && xball == 7)){
+        direction++;
+    }
+    if(direction == 0 && xball == 7){
+        direction = 7;
+    }
+    if(direction == 4 && xball == 0){
+        direction = 3;
+    }
+    if(direction == 2 && yball == 1){
+        direction = 3;
+    }
+    if(direction == 2 && yball == 6){
+        direction = 1;
+    }
+    if(direction == 6 && yball == 1){
+        direction = 5;
+    }
+    if(direction == 6 && yball == 6){
+        direction = 7;
+    }
+    
+    // "Corner" case
+    if(xball == 0 && yball == 1){
+        direction = 3;
+    }
+    if(xball == 0 && yball == 6){
+        direction = 1;
+    }
+    if(xball == 7 && yball == 6){
+        direction = 7;
+    }
+    if(xball == 7 && yball == 1){
+        direction = 5;
+    }
+ 
+    yball_prev = yball;
+    if(2 < direction && direction < 6) {
+        yball++;
+    } else if(direction != 6 && direction != 2) {
+        yball--;
+    }
+    if(0 < direction && direction < 4) {
+        xball++;
+    } else if(direction != 0 && direction != 4) {
+        xball--;
+    }
+    xball = max(0, min(7, xball));
+    yball = max(0, min(6, yball));
+    debug("AFTER MOVE");
+}
+ 
+void gameOver() {
+    contador+=1;
+    
+    if(contador == 1){
+      digitalWrite(51, HIGH);
+  
+    }
+    else if (contador == 2){
+      digitalWrite(52, HIGH);
+     
+    }
+    else if (contador == 3){
+      digitalWrite(53, HIGH);
+      
+    }
+    else if(contador > 3){
+    digitalWrite(40, LOW);
+    digitalWrite(41, HIGH);
+    setSprite(dos);
+    delay(1500);
+    lc.clearDisplay(0);
+    xpad= 8 - PADSIZE;
+    xpad2= 8 - PADSIZE;
+    newGame();
+    }
+    
+}
+void gameOver2() {
+ contador2+=1;
+    
+    if(contador2 == 1){
+      digitalWrite(47, HIGH);
+  
+    }
+    else if (contador2 == 2){
+      digitalWrite(48, HIGH);
+     
+    }
+    else if (contador2 == 3){
+      digitalWrite(49, HIGH);
+      
+    }
+    else if(contador2 > 3){
+    digitalWrite(40, HIGH);
+    digitalWrite(41, LOW);
+    setSprite(uno);
+    delay(1500);
+    lc.clearDisplay(0);
+    xpad= 8 - PADSIZE;
+    xpad2= 8 - PADSIZE;
+    newGame();
+    }
+  }
+ 
+void drawGame() {
+    if(yball_prev != yball){
+        lc.setRow(0, yball_prev, 0);
+    }
+    lc.setRow(0, yball, byte(1 << (xball)));
+    byte padmap = byte(0xFF >> (8 - PADSIZE) << xpad) ;
+    byte padmap2 = byte(0xFF >> (8- PADSIZE ) << xpad2);
+#ifdef DEBUG
+    //Serial.println(padmap, BIN);
+#endif
+    lc.setRow(0, 7, padmap);
+    lc.setRow(0, 0, padmap2);
+}
+ 
+void setup() {
+  pinMode(JPIN, INPUT);
+  pinMode(JPIN2, INPUT);
+  pinMode(40, OUTPUT);
+  pinMode(41, OUTPUT);
+  pinMode(47, OUTPUT);
+  pinMode(48, OUTPUT);
+  pinMode(49, OUTPUT);
+  pinMode(51, OUTPUT);
+  pinMode(52, OUTPUT);
+  pinMode(53, OUTPUT);
+  
+ 
+  lc.shutdown(0,false);
+  lc.setIntensity(0, 8);
+  lc.clearDisplay(0);
+  randomSeed(analogRead(0));
+#ifdef DEBUG
+  Serial.begin(9600);
+  Serial.println("Pong");
+#endif
+  newGame();
+  ball_timer = timer.every(BALL_DELAY, moveBall);
+}
+ 
+void loop() {
+    timer.update();
+    setPad();
+    setPad2();
+#ifdef DEBUG
+    Serial.println(xpad);
+#endif
+    drawGame();
+    if(checkLoose()) {
+        debug("LOOSE");
+        gameOver();
+    }
+    else if(checkLoose2()){
+      debug("LOOSE");
+      gameOver2();
+     }
+    delay(GAME_DELAY);
+}
